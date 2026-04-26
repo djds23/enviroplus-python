@@ -14,7 +14,6 @@ from bme280 import BME280
 from enviroplus import gas
 from pms5003 import PMS5003, ReadTimeoutError as pmsReadTimeoutError
 from supabase import create_client
-from tapo import ApiClient
 
 from config import (
     SUPABASE_URL, SUPABASE_KEY,
@@ -197,23 +196,6 @@ def write_readings(sensor_readings: dict):
     rows = build_rows(sensor_readings)
     write_to_sqlite(rows)
     write_to_supabase(rows)
-
-# ---------------------------------------------------------------------------
-# Tapo switch
-# ---------------------------------------------------------------------------
-
-async def set_tapo_switch(on: bool):
-    try:
-        client = await ApiClient(TAPO_EMAIL, TAPO_PASS).p100(TAPO_IP)
-        await client.on() if on else await client.off()
-        logging.info(f"Tapo switch turned {'on' if on else 'off'}")
-    except Exception as e:
-        logging.error(f"Tapo control failed: {e}")
-
-def check_and_trigger(sensor_readings: dict):
-    pm2_5 = sensor_readings.get("pm2_5")
-    if pm2_5 is not None:
-        asyncio.run(set_tapo_switch(pm2_5 > PM25_THRESHOLD))
 
 # ---------------------------------------------------------------------------
 # Display
