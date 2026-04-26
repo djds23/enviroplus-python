@@ -174,6 +174,8 @@ def build_rows(sensor_readings: dict) -> list[dict]:
 # Writers
 # ---------------------------------------------------------------------------
 
+_last_written: dict[str, float] = {}
+
 def write_to_sqlite(rows: list[dict]):
     try:
         sqlite_conn.executemany(
@@ -193,9 +195,15 @@ def write_to_supabase(rows: list[dict]):
         logging.error(f"Supabase write failed: {e}")
 
 def write_readings(sensor_readings: dict):
-    rows = build_rows(sensor_readings)
-    write_to_sqlite(rows)
-    write_to_supabase(rows)
+    all_rows = build_rows(sensor_readings)
+    changed = [r for r in all_rows if round(r["value"], 1) != _last_written.get(r["label"])]
+    if not changed:
+        logging.info("No sensor values changed — skipping write")
+        return
+    for r in changed:
+        _last_written[r["label"]] = round(r["value"], 1)
+    write_to_sqlite(changed)
+    write_to_supabase(changed)
 
 # ---------------------------------------------------------------------------
 # Display
