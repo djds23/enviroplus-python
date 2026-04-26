@@ -20,3 +20,4 @@ library/debian/
 .tox
 .vscode/
 .idea/
+.claude/
