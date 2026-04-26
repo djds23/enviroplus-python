@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 from fonts.ttf import RobotoMedium as UserFont
 from bme280 import BME280
 from enviroplus import gas
-from pms5003 import PMS5003, ReadTimeoutError as pmsReadTimeoutError
+from pms5003 import PMS5003, ReadTimeoutError as pmsReadTimeoutError, SerialTimeoutError
 from supabase import create_client
 
 from config import (
@@ -140,7 +140,7 @@ def read_all_sensors() -> dict:
         readings["pm1"]   = float(pms_data.pm_ug_per_m3(1.0))
         readings["pm2_5"] = float(pms_data.pm_ug_per_m3(2.5))
         readings["pm10"]  = float(pms_data.pm_ug_per_m3(10))
-    except SerialTimeoutError:
+    except (pmsReadTimeoutError, SerialTimeoutError):
         logging.warning("PMS5003 read timeout — skipping particulates")
         readings["pm1"] = readings["pm2_5"] = readings["pm10"] = None
 
