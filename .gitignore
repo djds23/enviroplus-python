@@ -19,3 +19,4 @@ library/debian/
 .pytest_cache
 .tox
 .vscode/
+.idea/
