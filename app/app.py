@@ -140,7 +140,7 @@ def read_all_sensors() -> dict:
         readings["pm1"]   = float(pms_data.pm_ug_per_m3(1.0))
         readings["pm2_5"] = float(pms_data.pm_ug_per_m3(2.5))
         readings["pm10"]  = float(pms_data.pm_ug_per_m3(10))
-    except pmsReadTimeoutError:
+    except SerialTimeoutError:
         logging.warning("PMS5003 read timeout — skipping particulates")
         readings["pm1"] = readings["pm2_5"] = readings["pm10"] = None
 
