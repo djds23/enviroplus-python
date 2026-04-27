@@ -34,6 +34,17 @@ logging.basicConfig(
 )
 
 # ---------------------------------------------------------------------------
+# App state
+# ---------------------------------------------------------------------------
+
+class AppState:
+    def __init__(self):
+        self.current_readings: dict = {}
+        self.last_sync_time: float | None = None
+        self.last_written: dict[str, float] = {}
+        self.cpu_temp_history: list[float] = []
+
+# ---------------------------------------------------------------------------
 # Sensor + client init
 # ---------------------------------------------------------------------------
 
@@ -102,28 +113,26 @@ history = {name: [1] * WIDTH for name, _ in VARIABLES}
 # CPU temp compensation
 # ---------------------------------------------------------------------------
 
-COMP_FACTOR      = 2.25
-cpu_temp_history = []
+COMP_FACTOR = 2.25
 
 def get_cpu_temp() -> float:
     with open("/sys/class/thermal/thermal_zone0/temp") as f:
         return int(f.read()) / 1000.0
 
-def compensated_temperature(raw_temp: float) -> float:
-    global cpu_temp_history
-    cpu_temp_history = (cpu_temp_history + [get_cpu_temp()])[-5:]
-    avg_cpu = sum(cpu_temp_history) / len(cpu_temp_history)
+def compensated_temperature(raw_temp: float, state: AppState) -> float:
+    state.cpu_temp_history = (state.cpu_temp_history + [get_cpu_temp()])[-5:]
+    avg_cpu = sum(state.cpu_temp_history) / len(state.cpu_temp_history)
     return raw_temp - ((avg_cpu - raw_temp) / COMP_FACTOR)
 
 # ---------------------------------------------------------------------------
 # Read all sensors
 # ---------------------------------------------------------------------------
 
-def read_all_sensors() -> dict:
+def read_all_sensors(state: AppState) -> dict:
     readings = {}
 
     raw_temp = bme280.get_temperature()
-    readings["temperature"] = compensated_temperature(raw_temp)
+    readings["temperature"] = compensated_temperature(raw_temp, state)
     readings["pressure"]    = bme280.get_pressure()
     readings["humidity"]    = bme280.get_humidity()
 
@@ -174,8 +183,6 @@ def build_rows(sensor_readings: dict) -> list[dict]:
 # Writers
 # ---------------------------------------------------------------------------
 
-_last_written: dict[str, float] = {}
-
 def write_to_sqlite(rows: list[dict]):
     try:
         sqlite_conn.executemany(
@@ -187,23 +194,24 @@ def write_to_sqlite(rows: list[dict]):
     except Exception as e:
         logging.error(f"SQLite write failed: {e}")
 
-def write_to_supabase(rows: list[dict]):
+def write_to_supabase(rows: list[dict], state: AppState):
     try:
         supabase.table("readings").insert(rows).execute()
+        state.last_sync_time = time.time()
         logging.info(f"Supabase: wrote {len(rows)} rows")
     except Exception as e:
         logging.error(f"Supabase write failed: {e}")
 
-def write_readings(sensor_readings: dict):
+def write_readings(sensor_readings: dict, state: AppState):
     all_rows = build_rows(sensor_readings)
-    changed = [r for r in all_rows if round(r["value"], 1) != _last_written.get(r["label"])]
+    changed = [r for r in all_rows if round(r["value"], 1) != state.last_written.get(r["label"])]
     if not changed:
         logging.info("No sensor values changed — skipping write")
         return
     for r in changed:
-        _last_written[r["label"]] = round(r["value"], 1)
+        state.last_written[r["label"]] = round(r["value"], 1)
     write_to_sqlite(changed)
-    write_to_supabase(changed)
+    write_to_supabase(changed, state)
 
 # ---------------------------------------------------------------------------
 # Display
@@ -229,31 +237,18 @@ def update_display(variable: str, unit: str, value: float):
 # Main loop
 # ---------------------------------------------------------------------------
 
-mode      = 0
-last_tap  = 0
-TAP_DELAY = 0.5
-last_log  = 0
+state    = AppState()
+last_log = 0
 
-current_readings = read_all_sensors()
+state.current_readings = read_all_sensors(state)
 
 try:
     while True:
-        proximity = ltr559.get_proximity()
         now = time.time()
 
-        if proximity > 1500 and now - last_tap > TAP_DELAY:
-            mode     = (mode + 1) % len(VARIABLES)
-            last_tap = now
-
-        var_name, var_unit = VARIABLES[mode]
-        val = current_readings.get(var_name)
-        if val is not None:
-            update_display(var_name, var_unit, val)
-
         if now - last_log >= LOG_INTERVAL:
-            current_readings = read_all_sensors()
-            write_readings(current_readings)
-            # check_and_trigger(current_readings)
+            state.current_readings = read_all_sensors(state)
+            write_readings(state.current_readings, state)
             last_log = now
 
         time.sleep(0.5)
