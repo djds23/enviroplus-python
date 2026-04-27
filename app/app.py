@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import asyncio
-import colorsys
 import logging
 import sqlite3
 import sys
@@ -90,24 +88,22 @@ HEIGHT = display.height
 
 img  = Image.new("RGB", (WIDTH, HEIGHT), color=(0, 0, 0))
 draw = ImageDraw.Draw(img)
-font = ImageFont.truetype(UserFont, 20)
+font = ImageFont.truetype(UserFont, 11)
 
-TOP_BAR = 25
+CELL_W = WIDTH  // 2
+CELL_H = HEIGHT // 4
 
-VARIABLES = [
-    ("temperature", "°C"),
-    ("pressure",    "hPa"),
-    ("humidity",    "%"),
-    ("light",       "Lux"),
-    ("oxidised",    "kΩ"),
-    ("reduced",     "kΩ"),
-    ("nh3",         "kΩ"),
-    ("pm1",         "ug/m3"),
-    ("pm2_5",       "ug/m3"),
-    ("pm10",        "ug/m3"),
-]
+DISPLAY_SENSORS = {
+    "temperature": ("tmp", "°C"),
+    "pressure":    ("prs", "hPa"),
+    "humidity":    ("hum", "%"),
+    "nh3":         ("nh3", "kΩ"),
+    "pm1":         ("pm1", "ug/m3"),
+    "pm2_5":       ("p25", "ug/m3"),
+    "pm10":        ("p10", "ug/m3"),
+}
 
-history = {name: [1] * WIDTH for name, _ in VARIABLES}
+GRID_CELLS = ["sync", "temperature", "pressure", "humidity", "nh3", "pm1", "pm2_5", "pm10"]
 
 # ---------------------------------------------------------------------------
 # CPU temp compensation
@@ -217,20 +213,36 @@ def write_readings(sensor_readings: dict, state: AppState):
 # Display
 # ---------------------------------------------------------------------------
 
-def update_display(variable: str, unit: str, value: float):
-    history[variable] = history[variable][1:] + [value]
-    vals = history[variable]
-    vmin, vmax = min(vals), max(vals)
-    colours = [(v - vmin + 1) / (vmax - vmin + 1) for v in vals]
+def render_dashboard(state: AppState):
+    draw.rectangle((0, 0, WIDTH, HEIGHT), (0, 0, 0))
 
-    draw.rectangle((0, 0, WIDTH, HEIGHT), (255, 255, 255))
-    for i, c in enumerate(colours):
-        r, g, b = [int(x * 255) for x in colorsys.hsv_to_rgb((1.0 - c) * 0.6, 1.0, 1.0)]
-        draw.rectangle((i, TOP_BAR, i + 1, HEIGHT), (r, g, b))
-        line_y = HEIGHT - (TOP_BAR + (c * (HEIGHT - TOP_BAR))) + TOP_BAR
-        draw.rectangle((i, line_y, i + 1, line_y + 1), (0, 0, 0))
+    for i, key in enumerate(GRID_CELLS):
+        x = (i % 2) * CELL_W
+        y = (i // 2) * CELL_H
 
-    draw.text((0, 0), f"{variable[:4]}: {value:.1f} {unit}", font=font, fill=(0, 0, 0))
+        if key == "sync":
+            label = "sync"
+            if state.last_sync_time is not None:
+                value_text = time.strftime("%H:%M", time.localtime(state.last_sync_time))
+            else:
+                value_text = "--:--"
+            value_color = (255, 255, 255)
+        else:
+            label, unit = DISPLAY_SENSORS[key]
+            val = state.current_readings.get(key)
+            if val is None:
+                value_text  = "ERR"
+                value_color = (255, 0, 0)
+            elif key == "pm2_5" and val > PM25_THRESHOLD:
+                value_text  = f"{val:.1f} {unit}"
+                value_color = (255, 0, 0)
+            else:
+                value_text  = f"{val:.1f} {unit}"
+                value_color = (255, 255, 255)
+
+        draw.text((x + 2, y + 1),  label,      font=font, fill=(180, 180, 180))
+        draw.text((x + 2, y + 12), value_text, font=font, fill=value_color)
+
     display.display(img)
 
 # ---------------------------------------------------------------------------
@@ -251,6 +263,7 @@ try:
             write_readings(state.current_readings, state)
             last_log = now
 
+        render_dashboard(state)
         time.sleep(0.5)
 
 except KeyboardInterrupt:
