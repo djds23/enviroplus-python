@@ -218,17 +218,18 @@ def render_dashboard(state: AppState):
 
     for i, key in enumerate(GRID_CELLS):
         x = (i % 2) * CELL_W
-        y = (i // 2) * CELL_H
+        y = (i // 2) * CELL_H + (CELL_H // 2) - 6
 
         if key == "sync":
-            label = "sync"
+            label = "sync "
             if state.last_sync_time is not None:
                 value_text = time.strftime("%H:%M", time.localtime(state.last_sync_time))
             else:
                 value_text = "--:--"
             value_color = (255, 255, 255)
         else:
-            label, unit = DISPLAY_SENSORS[key]
+            label_short, unit = DISPLAY_SENSORS[key]
+            label = label_short + " "
             val = state.current_readings.get(key)
             if val is None:
                 value_text  = "ERR"
@@ -240,8 +241,9 @@ def render_dashboard(state: AppState):
                 value_text  = f"{val:.1f} {unit}"
                 value_color = (255, 255, 255)
 
-        draw.text((x + 2, y + 1),  label,      font=font, fill=(180, 180, 180))
-        draw.text((x + 2, y + 12), value_text, font=font, fill=value_color)
+        label_w = font.getlength(label)
+        draw.text((x + 2,          y), label,      font=font, fill=(180, 180, 180))
+        draw.text((x + 2 + label_w, y), value_text, font=font, fill=value_color)
 
     display.display(img)
 
