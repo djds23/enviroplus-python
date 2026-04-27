@@ -34,6 +34,17 @@ logging.basicConfig(
 )
 
 # ---------------------------------------------------------------------------
+# App state
+# ---------------------------------------------------------------------------
+
+class AppState:
+    def __init__(self):
+        self.current_readings: dict = {}
+        self.last_sync_time: float | None = None
+        self.last_written: dict[str, float] = {}
+        self.cpu_temp_history: list[float] = []
+
+# ---------------------------------------------------------------------------
 # Sensor + client init
 # ---------------------------------------------------------------------------
 
@@ -108,7 +119,7 @@ def get_cpu_temp() -> float:
     with open("/sys/class/thermal/thermal_zone0/temp") as f:
         return int(f.read()) / 1000.0
 
-def compensated_temperature(raw_temp: float, state: "AppState") -> float:
+def compensated_temperature(raw_temp: float, state: AppState) -> float:
     state.cpu_temp_history = (state.cpu_temp_history + [get_cpu_temp()])[-5:]
     avg_cpu = sum(state.cpu_temp_history) / len(state.cpu_temp_history)
     return raw_temp - ((avg_cpu - raw_temp) / COMP_FACTOR)
@@ -117,7 +128,7 @@ def compensated_temperature(raw_temp: float, state: "AppState") -> float:
 # Read all sensors
 # ---------------------------------------------------------------------------
 
-def read_all_sensors(state: "AppState") -> dict:
+def read_all_sensors(state: AppState) -> dict:
     readings = {}
 
     raw_temp = bme280.get_temperature()
@@ -167,17 +178,6 @@ def build_rows(sensor_readings: dict) -> list[dict]:
         for key, (label, unit) in SENSOR_META.items()
         if sensor_readings.get(key) is not None
     ]
-
-# ---------------------------------------------------------------------------
-# App state
-# ---------------------------------------------------------------------------
-
-class AppState:
-    def __init__(self):
-        self.current_readings: dict = {}
-        self.last_sync_time: float | None = None
-        self.last_written: dict[str, float] = {}
-        self.cpu_temp_history: list[float] = []
 
 # ---------------------------------------------------------------------------
 # Writers
