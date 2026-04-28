@@ -12,7 +12,7 @@ def load_env(path="/home/deanrex/.env"):
 
 load_env()
 
-POCKETBASE_URL      = os.environ.get("POCKETBASE_URL",   "http://tenor.local:8090")
+POCKETBASE_URL      = os.environ["POCKETBASE_URL"]
 POCKETBASE_EMAIL    = os.environ["POCKETBASE_EMAIL"]
 POCKETBASE_PASSWORD = os.environ["POCKETBASE_PASSWORD"]
 TAPO_IP        = os.environ["TAPO_IP"]
