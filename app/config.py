@@ -12,8 +12,9 @@ def load_env(path="/home/deanrex/.env"):
 
 load_env()
 
-SUPABASE_URL   = os.environ["SUPABASE_URL"]
-SUPABASE_KEY   = os.environ["SUPABASE_KEY"]
+POCKETBASE_URL      = os.environ["POCKETBASE_URL"]
+POCKETBASE_EMAIL    = os.environ["POCKETBASE_EMAIL"]
+POCKETBASE_PASSWORD = os.environ["POCKETBASE_PASSWORD"]
 TAPO_IP        = os.environ["TAPO_IP"]
 TAPO_EMAIL     = os.environ["TAPO_EMAIL"]
 TAPO_PASS      = os.environ["TAPO_PASS"]

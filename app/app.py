@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
+import json
 import logging
 import sqlite3
 import sys
 import time
+import urllib.error
+import urllib.request
 
 import st7735
 from PIL import Image, ImageDraw, ImageFont
@@ -11,10 +14,8 @@ from fonts.ttf import RobotoMedium as UserFont
 from bme280 import BME280
 from enviroplus import gas
 from pms5003 import PMS5003, ReadTimeoutError as pmsReadTimeoutError, SerialTimeoutError
-from supabase import create_client
-
 from config import (
-    SUPABASE_URL, SUPABASE_KEY,
+    POCKETBASE_URL, POCKETBASE_EMAIL, POCKETBASE_PASSWORD,
     TAPO_IP, TAPO_EMAIL, TAPO_PASS,
     PM25_THRESHOLD, LOG_INTERVAL, SQLITE_PATH
 )
@@ -41,14 +42,14 @@ class AppState:
         self.last_sync_time: float | None = None
         self.last_written: dict[str, float] = {}
         self.cpu_temp_history: list[float] = []
+        self.pb_token: str | None = None
 
 # ---------------------------------------------------------------------------
-# Sensor + client init
+# Sensor init
 # ---------------------------------------------------------------------------
 
-bme280   = BME280()
-pms5003  = PMS5003()
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+bme280  = BME280()
+pms5003 = PMS5003()
 
 # ---------------------------------------------------------------------------
 # SQLite init
@@ -190,13 +191,55 @@ def write_to_sqlite(rows: list[dict]):
     except Exception as e:
         logging.error(f"SQLite write failed: {e}")
 
-def write_to_supabase(rows: list[dict], state: AppState):
+def _pb_post(path: str, body: dict, token: str | None) -> tuple[int, dict]:
+    data = json.dumps(body).encode()
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = token
+    req = urllib.request.Request(
+        f"{POCKETBASE_URL}{path}", data=data, headers=headers
+    )
     try:
-        supabase.table("readings").insert(rows).execute()
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return e.code, {}
+
+def authenticate_pocketbase(state: AppState) -> bool:
+    status, body = _pb_post(
+        "/api/collections/users/auth-with-password",
+        {"identity": POCKETBASE_EMAIL, "password": POCKETBASE_PASSWORD},
+        token=None,
+    )
+    if status == 200:
+        state.pb_token = body["token"]
+        logging.info("PocketBase: authenticated")
+        return True
+    logging.error(f"PocketBase auth failed: {status}")
+    return False
+
+def write_to_pocketbase(rows: list[dict], state: AppState):
+    if not state.pb_token and not authenticate_pocketbase(state):
+        return
+
+    failed = []
+    for row in rows:
+        body = {"label": row["label"], "unit": row["unit"], "value": row["value"]}
+        status, _ = _pb_post("/api/collections/readings/records", body, state.pb_token)
+
+        if status == 401:
+            if not authenticate_pocketbase(state):
+                return
+            status, _ = _pb_post("/api/collections/readings/records", body, state.pb_token)
+
+        if status not in (200, 201):
+            failed.append(row["label"])
+
+    if failed:
+        logging.error(f"PocketBase: failed to write {failed}")
+    else:
         state.last_sync_time = time.time()
-        logging.info(f"Supabase: wrote {len(rows)} rows")
-    except Exception as e:
-        logging.error(f"Supabase write failed: {e}")
+        logging.info(f"PocketBase: wrote {len(rows)} rows")
 
 def write_readings(sensor_readings: dict, state: AppState):
     all_rows = build_rows(sensor_readings)
@@ -207,7 +250,7 @@ def write_readings(sensor_readings: dict, state: AppState):
     for r in changed:
         state.last_written[r["label"]] = round(r["value"], 1)
     write_to_sqlite(changed)
-    write_to_supabase(changed, state)
+    write_to_pocketbase(changed, state)
 
 # ---------------------------------------------------------------------------
 # Display
