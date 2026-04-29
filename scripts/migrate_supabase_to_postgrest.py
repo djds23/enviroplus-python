@@ -16,9 +16,7 @@ import urllib.error
 import urllib.request
 
 sys.path.insert(0, "app")
-from config import (
-    POSTGREST_URL, POSTGREST_JWT,
-)
+from config import POSTGREST_URL
 
 # Supabase vars are no longer in config.py — read them directly here
 # since this is a one-time migration script.
@@ -59,10 +57,7 @@ def pgr_insert(rows: list[dict]) -> None:
     req = urllib.request.Request(
         f"{POSTGREST_URL}/readings",
         data=json.dumps(rows).encode(),
-        headers={
-            "Content-Type":  "application/json",
-            "Authorization": f"Bearer {POSTGREST_JWT}",
-        },
+        headers={"Content-Type": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=30):
         pass  # 201 = success, HTTPError raised otherwise

@@ -15,7 +15,7 @@ from bme280 import BME280
 from enviroplus import gas
 from pms5003 import PMS5003, ReadTimeoutError as pmsReadTimeoutError, SerialTimeoutError
 from config import (
-    POSTGREST_URL, POSTGREST_JWT,
+    POSTGREST_URL,
     TAPO_IP, TAPO_EMAIL, TAPO_PASS,
     PM25_THRESHOLD, LOG_INTERVAL, SQLITE_PATH
 )
@@ -195,10 +195,7 @@ def write_to_postgrest(rows: list[dict], state: AppState):
     req  = urllib.request.Request(
         f"{POSTGREST_URL}/readings",
         data=json.dumps(body).encode(),
-        headers={
-            "Content-Type":  "application/json",
-            "Authorization": f"Bearer {POSTGREST_JWT}",
-        },
+        headers={"Content-Type": "application/json"},
     )
     try:
         with urllib.request.urlopen(req, timeout=10):

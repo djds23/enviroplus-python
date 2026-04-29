@@ -13,7 +13,6 @@ def load_env(path="/home/deanrex/.env"):
 load_env()
 
 POSTGREST_URL = os.environ["POSTGREST_URL"]
-POSTGREST_JWT = os.environ["POSTGREST_JWT"]
 TAPO_IP        = os.environ["TAPO_IP"]
 TAPO_EMAIL     = os.environ["TAPO_EMAIL"]
 TAPO_PASS      = os.environ["TAPO_PASS"]
