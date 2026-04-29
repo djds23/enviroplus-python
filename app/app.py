@@ -2,7 +2,6 @@
 
 import json
 import logging
-import sqlite3
 import sys
 import time
 import urllib.error
@@ -17,7 +16,7 @@ from pms5003 import PMS5003, ReadTimeoutError as pmsReadTimeoutError, SerialTime
 from config import (
     POSTGREST_URL,
     TAPO_IP, TAPO_EMAIL, TAPO_PASS,
-    PM25_THRESHOLD, LOG_INTERVAL, SQLITE_PATH
+    PM25_THRESHOLD, LOG_INTERVAL,
 )
 
 try:
@@ -49,28 +48,6 @@ class AppState:
 
 bme280  = BME280()
 pms5003 = PMS5003()
-
-# ---------------------------------------------------------------------------
-# SQLite init
-# ---------------------------------------------------------------------------
-
-def init_sqlite(path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(path, check_same_thread=False)
-    conn.execute("""
-        create table if not exists readings (
-            id          integer primary key autoincrement,
-            recorded_at text    default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-            label       text    not null,
-            unit        text    not null,
-            value       real    not null
-        )
-    """)
-    conn.execute("create index if not exists idx_readings_label on readings (label)")
-    conn.execute("create index if not exists idx_readings_time  on readings (recorded_at)")
-    conn.commit()
-    return conn
-
-sqlite_conn = init_sqlite(SQLITE_PATH)
 
 # ---------------------------------------------------------------------------
 # Display init
@@ -179,17 +156,6 @@ def build_rows(sensor_readings: dict) -> list[dict]:
 # Writers
 # ---------------------------------------------------------------------------
 
-def write_to_sqlite(rows: list[dict]):
-    try:
-        sqlite_conn.executemany(
-            "insert into readings (label, unit, value) values (:label, :unit, :value)",
-            rows
-        )
-        sqlite_conn.commit()
-        logging.info(f"SQLite: wrote {len(rows)} rows")
-    except Exception as e:
-        logging.error(f"SQLite write failed: {e}")
-
 def write_to_postgrest(rows: list[dict], state: AppState):
     body = [{"label": r["label"], "unit": r["unit"], "value": r["value"]} for r in rows]
     req  = urllib.request.Request(
@@ -214,7 +180,6 @@ def write_readings(sensor_readings: dict, state: AppState):
         return
     for r in changed:
         state.last_written[r["label"]] = round(r["value"], 1)
-    write_to_sqlite(changed)
     write_to_postgrest(changed, state)
 
 # ---------------------------------------------------------------------------
@@ -278,5 +243,4 @@ try:
 
 except KeyboardInterrupt:
     logging.info("Exiting cleanly")
-    sqlite_conn.close()
     sys.exit(0)

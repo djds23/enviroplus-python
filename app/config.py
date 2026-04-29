@@ -18,4 +18,3 @@ TAPO_EMAIL     = os.environ["TAPO_EMAIL"]
 TAPO_PASS      = os.environ["TAPO_PASS"]
 PM25_THRESHOLD = float(os.environ.get("PM25_THRESHOLD", 35))
 LOG_INTERVAL   = int(os.environ.get("LOG_INTERVAL",    300))
-SQLITE_PATH    = os.environ.get("SQLITE_PATH",         "/home/deanrex/aqi_readings.db")
